@@ -120,8 +120,24 @@ describe("findShapeByKey()", () => {
   it("does not match plain-bound tools when shift is held", () => {
     const app = appWithPreferredTool("selection");
 
-    expect(findShapeByKey("R", app, true)).toBeNull();
+    expect(findShapeByKey("D", app, true)).toBeNull();
     expect(findShapeByKey("V", app, true)).toBeNull();
+  });
+
+  it("reaches every tool from the left half of the keyboard", () => {
+    const app = appWithPreferredTool("selection");
+
+    expect(findShapeByKey("c", app)).toBe("ellipse");
+    expect(findShapeByKey("z", app)).toBe("line");
+    expect(findShapeByKey(" ", app, true)).toBe("hand");
+    expect(findShapeByKey("T", app, true)).toBe("stickynote");
+    expect(findShapeByKey("R", app, true)).toBe("image");
+    expect(findShapeByKey("E", app, true)).toBe("laser");
+    // plain keys keep their original tools
+    expect(findShapeByKey(" ", app)).toBeNull();
+    expect(findShapeByKey("t", app)).toBe("text");
+    expect(findShapeByKey("r", app)).toBe("rectangle");
+    expect(findShapeByKey("e", app)).toBe("eraser");
   });
 });
 

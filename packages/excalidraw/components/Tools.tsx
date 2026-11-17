@@ -45,6 +45,11 @@ export type ToolConfig = {
   letterKey?: string | readonly string[];
   /** whether `letterKey` requires Shift to be held (e.g. Shift+X) */
   shiftKey?: boolean;
+  /**
+   * extra Shift+<key> shortcut for tools whose letter sits on the right half
+   * of the keyboard, so every tool is reachable with the left hand
+   */
+  leftHandShiftKey?: string;
   numericKey?: string;
   /** whether the tool's shapes can be filled — fills the icon when active */
   fillable?: boolean;
@@ -70,6 +75,7 @@ export const TOOLS = defineTools({
   hand: {
     icon: handIcon,
     letterKey: KEYS.H,
+    leftHandShiftKey: KEYS.SPACE,
     toggle: true,
   },
   selection: {
@@ -92,7 +98,7 @@ export const TOOLS = defineTools({
   },
   ellipse: {
     icon: EllipseIcon,
-    letterKey: KEYS.O,
+    letterKey: [KEYS.C, KEYS.O],
     numericKey: KEYS["4"],
     fillable: true,
   },
@@ -104,7 +110,7 @@ export const TOOLS = defineTools({
   },
   line: {
     icon: LineIcon,
-    letterKey: KEYS.L,
+    letterKey: [KEYS.Z, KEYS.L],
     numericKey: KEYS["6"],
     fillable: true,
   },
@@ -121,9 +127,11 @@ export const TOOLS = defineTools({
   stickynote: {
     icon: stickyNoteToolIcon,
     letterKey: KEYS.N,
+    leftHandShiftKey: KEYS.T,
   },
   image: {
     icon: ImageIcon,
+    leftHandShiftKey: KEYS.R,
     numericKey: KEYS["9"],
   },
   eraser: {
@@ -148,6 +156,7 @@ export const TOOLS = defineTools({
   laser: {
     icon: laserPointerToolIcon,
     letterKey: KEYS.K,
+    leftHandShiftKey: KEYS.E,
   },
   bucketfill: {
     icon: bucketFillIcon,
@@ -182,12 +191,20 @@ export const getToolLetter = (type: ToolbarToolType) => {
 
 /** human-readable shortcut hint, e.g. "R or 2", used in tooltips & aria */
 export const getToolShortcut = (type: ToolbarToolType) => {
-  const letter = getToolLetter(type);
-  const { numericKey } = TOOLS[type];
-  return letter && numericKey != null
-    ? `${letter} ${t("helpDialog.or")} ${numericKey}`
-    : `${letter || numericKey}`;
+  const { numericKey, leftHandShiftKey } = TOOLS[type];
+  return [
+    getToolLetter(type),
+    numericKey,
+    leftHandShiftKey && getLeftHandShortcut(leftHandShiftKey),
+  ]
+    .filter(Boolean)
+    .join(` ${t("helpDialog.or")} `);
 };
+
+export const getLeftHandShortcut = (key: string) =>
+  getShortcutKey(
+    `Shift+${key === KEYS.SPACE ? "Space" : capitalizeString(key)}`,
+  );
 
 export const findShapeByKey = (
   key: string,
@@ -200,12 +217,19 @@ export const findShapeByKey = (
   const lowerKey = key.toLowerCase();
 
   for (const type of Object.keys(TOOLS) as ToolbarToolType[]) {
-    const { letterKey, numericKey, shiftKey: requiresShift } = TOOLS[type];
+    const {
+      letterKey,
+      numericKey,
+      shiftKey: requiresShift,
+      leftHandShiftKey,
+    } = TOOLS[type];
+    const matchesLeftHandKey = shiftKey && leftHandShiftKey === lowerKey;
     // shift-bound tools require shift; plain-bound ones require its absence
-    if (shiftKey !== Boolean(requiresShift)) {
+    if (shiftKey !== Boolean(requiresShift) && !matchesLeftHandKey) {
       continue;
     }
     if (
+      matchesLeftHandKey ||
       (numericKey != null && key === numericKey) ||
       (letterKey &&
         (typeof letterKey === "string"

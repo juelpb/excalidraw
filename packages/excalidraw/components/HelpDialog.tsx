@@ -146,7 +146,10 @@ export const HelpDialog = ({ onClose }: { onClose?: () => void }) => {
             className="HelpDialog__island--tools"
             caption={t("helpDialog.tools")}
           >
-            <Shortcut label={t("toolBar.hand")} shortcuts={[KEYS.H]} />
+            <Shortcut
+              label={t("toolBar.hand")}
+              shortcuts={[KEYS.H, getShortcutKey("Shift+Space")]}
+            />
             <Shortcut
               label={t("toolBar.selection")}
               shortcuts={[KEYS.V, KEYS["1"]]}
@@ -161,7 +164,7 @@ export const HelpDialog = ({ onClose }: { onClose?: () => void }) => {
             />
             <Shortcut
               label={t("toolBar.ellipse")}
-              shortcuts={[KEYS.O, KEYS["4"]]}
+              shortcuts={[KEYS.C, KEYS.O, KEYS["4"]]}
             />
             <Shortcut
               label={t("toolBar.arrow")}
@@ -169,24 +172,33 @@ export const HelpDialog = ({ onClose }: { onClose?: () => void }) => {
             />
             <Shortcut
               label={t("toolBar.line")}
-              shortcuts={[KEYS.L, KEYS["6"]]}
+              shortcuts={[KEYS.Z, KEYS.L, KEYS["6"]]}
             />
             <Shortcut
               label={t("toolBar.freedraw")}
-              shortcuts={[KEYS.P, KEYS["7"]]}
+              shortcuts={[KEYS.X, KEYS.P, KEYS["7"]]}
             />
             <Shortcut
               label={t("toolBar.text")}
               shortcuts={[KEYS.T, KEYS["8"]]}
             />
-            <Shortcut label={t("toolBar.stickynote")} shortcuts={[KEYS.N]} />
-            <Shortcut label={t("toolBar.image")} shortcuts={[KEYS["9"]]} />
+            <Shortcut
+              label={t("toolBar.stickynote")}
+              shortcuts={[KEYS.N, getShortcutKey("Shift+T")]}
+            />
+            <Shortcut
+              label={t("toolBar.image")}
+              shortcuts={[KEYS["9"], getShortcutKey("Shift+R")]}
+            />
             <Shortcut
               label={t("toolBar.eraser")}
               shortcuts={[KEYS.E, KEYS["0"]]}
             />
             <Shortcut label={t("toolBar.frame")} shortcuts={[KEYS.F]} />
-            <Shortcut label={t("toolBar.laser")} shortcuts={[KEYS.K]} />
+            <Shortcut
+              label={t("toolBar.laser")}
+              shortcuts={[KEYS.K, getShortcutKey("Shift+E")]}
+            />
             <Shortcut label={t("toolBar.bucketfill")} shortcuts={[KEYS.B]} />
             <Shortcut
               label={t("labels.eyeDropper")}
@@ -361,7 +373,7 @@ export const HelpDialog = ({ onClose }: { onClose?: () => void }) => {
             />
             <Shortcut
               label={t("labels.delete")}
-              shortcuts={[getShortcutKey("Delete")]}
+              shortcuts={[getShortcutKey("Delete"), "`"]}
             />
             <Shortcut
               label={t("labels.cut")}

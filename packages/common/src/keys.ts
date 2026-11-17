@@ -17,6 +17,8 @@ export const CODES = {
   QUOTE: "Quote",
   ZERO: "Digit0",
   SLASH: "Slash",
+  // physical key left of "1" (` on US, § or | on Nordic layouts)
+  BACKQUOTE: "Backquote",
   C: "KeyC",
   D: "KeyD",
   H: "KeyH",

@@ -2,17 +2,24 @@ import {
   loginIcon,
   ExcalLogo,
   eyeIcon,
+  LoadIcon,
+  PlusIcon,
 } from "@excalidraw/excalidraw/components/icons";
 import { useI18n } from "@excalidraw/excalidraw/i18n";
 import { MainMenu } from "@excalidraw/excalidraw/index";
 import React from "react";
 
 import { isDevEnv } from "@excalidraw/common";
+import { getShortcutKey } from "@excalidraw/excalidraw/shortcut";
 
 import type { Theme } from "@excalidraw/element/types";
 
 import { LanguageList } from "../app-language/LanguageList";
 import { isExcalidrawPlusSignedUser } from "../app_constants";
+import { useSetAtom } from "../app-jotai";
+import { isDiskSyncEnabled } from "../data/DiskSync";
+
+import { openCanvasDialogAtom, openNewCanvas } from "./CanvasSwitcher";
 
 import { saveDebugState } from "./DebugCanvas";
 
@@ -24,8 +31,28 @@ export const AppMainMenu: React.FC<{
   refresh: () => void;
 }> = React.memo((props) => {
   const { t } = useI18n();
+  const setOpenCanvasDialog = useSetAtom(openCanvasDialogAtom);
   return (
     <MainMenu>
+      {isDiskSyncEnabled && (
+        <>
+          <MainMenu.Item
+            icon={PlusIcon}
+            shortcut={getShortcutKey("Alt+Q")}
+            onSelect={openNewCanvas}
+          >
+            New canvas
+          </MainMenu.Item>
+          <MainMenu.Item
+            icon={LoadIcon}
+            shortcut={getShortcutKey("Alt+A")}
+            onSelect={() => setOpenCanvasDialog(true)}
+          >
+            Open canvas…
+          </MainMenu.Item>
+          <MainMenu.Separator />
+        </>
+      )}
       <MainMenu.DefaultItems.LoadScene />
       <MainMenu.DefaultItems.SaveToActiveFile />
       <MainMenu.DefaultItems.Export />

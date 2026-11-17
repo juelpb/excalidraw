@@ -85,6 +85,7 @@ import {
   useAtom,
   useAtomValue,
   useAtomWithInitialValue,
+  useSetAtom,
   appJotaiStore,
 } from "./app-jotai";
 import {
@@ -130,6 +131,15 @@ import {
   localStorageQuotaExceededAtom,
 } from "./data/LocalData";
 import { isBrowserStorageStateNewer } from "./data/tabSync";
+import {
+  flushCanvasSave,
+  homeUrl,
+  initCanvasId,
+  isDiskSyncEnabled,
+  loadCanvas,
+  saveCanvas,
+  setSaveErrorHandler,
+} from "./data/DiskSync";
 import { ShareDialog, shareDialogStateAtom } from "./share/ShareDialog";
 import CollabError, { collabErrorIndicatorAtom } from "./collab/CollabError";
 import { useHandleAppTheme } from "./useHandleAppTheme";
@@ -146,8 +156,12 @@ import { ExcalidrawPlusIframeExport } from "./ExcalidrawPlusIframeExport";
 
 import "./index.scss";
 
-import { ExcalidrawPlusPromoBanner } from "./components/ExcalidrawPlusPromoBanner";
 import { AppSidebar } from "./components/AppSidebar";
+import {
+  OpenCanvasDialog,
+  openCanvasDialogAtom,
+  openNewCanvas,
+} from "./components/CanvasSwitcher";
 
 import type { CollabAPI } from "./collab/Collab";
 
@@ -231,6 +245,8 @@ const initializeScene = async (opts: {
   const externalUrlMatch = window.location.hash.match(/^#url=(.*)$/);
 
   const localDataState = importFromLocalStorage();
+  // images embedded in the on-disk canvas file
+  let diskFiles: BinaryFiles | undefined;
 
   let scene: Omit<
     RestoredDataState,
@@ -246,6 +262,40 @@ const initializeScene = async (opts: {
     }),
     appState: restoreAppState(localDataState?.appState, null),
   };
+
+  if (isDiskSyncEnabled) {
+    // the canvas file on disk replaces the single localStorage scene;
+    // localStorage still supplies user preferences (theme, tool defaults)
+    initCanvasId();
+    try {
+      const diskScene = await loadCanvas(scene.appState as AppState);
+      scene = diskScene
+        ? {
+            elements: diskScene.elements,
+            appState: diskScene.appState,
+            scrollToContent: true,
+          }
+        : {
+            elements: [],
+            appState: restoreAppState(
+              {
+                ...localDataState?.appState,
+                name: null,
+                scrollX: 0,
+                scrollY: 0,
+                zoom: undefined,
+              },
+              null,
+            ),
+          };
+      diskFiles = diskScene?.files;
+    } catch (error: any) {
+      scene.appState = {
+        ...scene.appState,
+        errorMessage: `Local file server unreachable, so this canvas is not saving to disk. Start it with "yarn local". (${error.message})`,
+      };
+    }
+  }
 
   let roomLinkData = getCollaborationLinkData(window.location.href);
   const isExternalScene = !!(id || jsonBackendMatch || roomLinkData);
@@ -282,7 +332,7 @@ const initializeScene = async (opts: {
       }
       scene.scrollToContent = true;
       if (!roomLinkData) {
-        window.history.replaceState({}, APP_NAME, window.location.origin);
+        window.history.replaceState({}, APP_NAME, homeUrl());
       }
     } else {
       // https://github.com/excalidraw/excalidraw/issues/1919
@@ -299,10 +349,10 @@ const initializeScene = async (opts: {
       }
 
       roomLinkData = null;
-      window.history.replaceState({}, APP_NAME, window.location.origin);
+      window.history.replaceState({}, APP_NAME, homeUrl());
     }
   } else if (externalUrlMatch) {
-    window.history.replaceState({}, APP_NAME, window.location.origin);
+    window.history.replaceState({}, APP_NAME, homeUrl());
 
     const url = externalUrlMatch[1];
     try {
@@ -367,7 +417,7 @@ const initializeScene = async (opts: {
           id: jsonBackendMatch[1],
           key: jsonBackendMatch[2],
         }
-      : { scene, isExternalScene: false };
+      : { scene: { ...scene, files: diskFiles }, isExternalScene: false };
   }
   return { scene: null, isExternalScene: false };
 };
@@ -500,7 +550,11 @@ const ExcalidrawWrapper = () => {
       } else {
         const fileIds =
           data.scene.elements?.reduce((acc, element) => {
-            if (isInitializedImageElement(element)) {
+            if (
+              isInitializedImageElement(element) &&
+              // already embedded in the canvas file loaded from disk
+              !data.scene?.files?.[element.fileId]
+            ) {
               return acc.concat(element.fileId);
             }
             return acc;
@@ -602,8 +656,13 @@ const ExcalidrawWrapper = () => {
         !document.hidden &&
         ((collabAPI && !collabAPI.isCollaborating()) || isCollabDisabled)
       ) {
-        // don't sync if local state is newer or identical to browser state
-        if (isBrowserStorageStateNewer(STORAGE_KEYS.VERSION_DATA_STATE)) {
+        // don't sync if local state is newer or identical to browser state.
+        // With disk sync each tab owns its own canvas, so never pull another
+        // tab's scene from localStorage.
+        if (
+          !isDiskSyncEnabled &&
+          isBrowserStorageStateNewer(STORAGE_KEYS.VERSION_DATA_STATE)
+        ) {
           const localDataState = importFromLocalStorage();
           const username = importUsernameFromLocalStorage();
           setLangCode(getPreferredLanguage());
@@ -655,11 +714,13 @@ const ExcalidrawWrapper = () => {
 
     const onUnload = () => {
       LocalData.flushSave();
+      flushCanvasSave();
     };
 
     const visibilityChange = (event: FocusEvent | Event) => {
       if (event.type === EVENT.BLUR || document.hidden) {
         LocalData.flushSave();
+        flushCanvasSave();
       }
       if (
         event.type === EVENT.VISIBILITY_CHANGE ||
@@ -687,9 +748,46 @@ const ExcalidrawWrapper = () => {
     };
   }, [isCollabDisabled, collabAPI, excalidrawAPI, setLangCode, loadImages]);
 
+  const setOpenCanvasDialog = useSetAtom(openCanvasDialogAtom);
+  useEffect(() => {
+    if (!isDiskSyncEnabled) {
+      return;
+    }
+    // Alt+Q new canvas, Alt+A open canvas: left-hand reachable (Alt+W is
+    // already text auto-resize).
+    // `code` keeps these working on layouts where Alt changes `key`.
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+        return;
+      }
+      if (event.code === "KeyQ") {
+        event.preventDefault();
+        openNewCanvas();
+      } else if (event.code === "KeyA") {
+        event.preventDefault();
+        setOpenCanvasDialog(true);
+      }
+    };
+    window.addEventListener(EVENT.KEYDOWN, onKeyDown, { capture: true });
+    return () =>
+      window.removeEventListener(EVENT.KEYDOWN, onKeyDown, { capture: true });
+  }, [setOpenCanvasDialog]);
+
+  useEffect(() => {
+    setSaveErrorHandler((error) => {
+      console.error(error);
+      excalidrawAPI?.setToast({
+        message: `Not saved to disk: ${error.message}`,
+        closable: true,
+        duration: Infinity,
+      });
+    });
+  }, [excalidrawAPI]);
+
   useEffect(() => {
     const unloadHandler = (event: BeforeUnloadEvent) => {
       LocalData.flushSave();
+      flushCanvasSave();
 
       if (
         excalidrawAPI &&
@@ -719,6 +817,10 @@ const ExcalidrawWrapper = () => {
   ) => {
     if (collabAPI?.isCollaborating()) {
       collabAPI.syncElements(elements);
+    }
+
+    if (isDiskSyncEnabled) {
+      saveCanvas(elements, appState, files);
     }
 
     // this check is redundant, but since this is a hot path, it's best
@@ -1007,12 +1109,6 @@ const ExcalidrawWrapper = () => {
 
           return (
             <div className="excalidraw-ui-top-right">
-              {excalidrawAPI?.getEditorInterface().formFactor === "desktop" && (
-                <ExcalidrawPlusPromoBanner
-                  isSignedIn={isExcalidrawPlusSignedUser}
-                />
-              )}
-
               {collabError.message && <CollabError collabError={collabError} />}
               <LiveCollaborationTrigger
                 isCollaborating={isCollaborating}
@@ -1109,6 +1205,8 @@ const ExcalidrawWrapper = () => {
         />
 
         <AppSidebar />
+
+        {isDiskSyncEnabled && <OpenCanvasDialog />}
 
         {errorMessage && (
           <ErrorDialog onClose={() => setErrorMessage("")}>
